@@ -15,14 +15,18 @@ const int ORANGE[] = {255,50,0};
 const int MAGENTA[] = {255,0,255};
 
 //State variables
+double newFadeBrightness = 0;
+unsigned long nextFadeTime = 0;
+int fadeRefresh = 25;
 int buttonState = 0;
 int pulseState = 1;
 int currentColor[] = {255,255,255};
-int currentBrightness = 0;
+double currentBrightness = 0;
 
 
 //Runs at startup
 void setup() {
+//  Serial.begin(9600);
   pinMode(buttonPin, INPUT);
   pinMode(redPin, OUTPUT);
   pinMode(greenPin, OUTPUT);
@@ -33,20 +37,20 @@ void setup() {
 //Runs continuously
 void loop() {
   
-  pulse(0,30,WHITE);
+  continuePulse(2,4,3.0,WHITE);
 
   //If button is pressed...
   buttonState = digitalRead(buttonPin);
   if (buttonState == HIGH) {
 
-    //Cast red spell
-    setColor(RED);
+    //Cast cyan spell
+    setColor(CYAN);
     fadeToBrightness(100, 0.3);
-    delay(1000);
+    pulseForDuration(50,100,3.0,10);
     fadeToBrightness(0, 0.5);
 
-    //Wait 10 seconds
-    delay(10000);
+    //Wait 1 seconds
+    delay(1000);
 
     //Blink when recovered
     setColor(WHITE);
@@ -78,9 +82,9 @@ void setColor(const int color[]) {
 }
 
 //Immedietly set the LED's brightness (between 0 and 100)
-void setBrightness(int percentage) {
-  if (percentage > 100) currentBrightness = 100;
-  else if (percentage < 0) currentBrightness = 0;
+void setBrightness(double percentage) {
+  if (percentage > 100) currentBrightness = 100.0;
+  else if (percentage < 0) currentBrightness = 0.0;
   else currentBrightness = percentage;
   updateLED();
 }
@@ -88,39 +92,77 @@ void setBrightness(int percentage) {
 //Fade the LED to the 'color' over the course of 'seconds'
 void fadeToColor(const int color[], double seconds) {
   double ms = seconds*1000;
-  for (int i = 0; i <= ms; i += 25) {
+  for (int i = 0; i <= ms; i += fadeRefresh) {
     int tempColor[] = {
       int(currentColor[0]+(color[0]-currentColor[0])*(i/ms)),
       int(currentColor[1]+(color[1]-currentColor[1])*(i/ms)),
       int(currentColor[2]+(color[2]-currentColor[2])*(i/ms))};
     setColor(tempColor);
-    delay(25);
+    delay(fadeRefresh);
   }
   setColor(color);
 }
 
 //Fade the LED to 'brightness' over the course of 'seconds'
-void fadeToBrightness(int brightness, double seconds) {
+void fadeToBrightness(double brightness, double seconds) {
   double ms = seconds*1000;
-  for (int i = 0; i <= ms; i += 25) {
+  for (int i = 0; i <= ms; i += fadeRefresh) {
     setBrightness(int(currentBrightness+(brightness-currentBrightness)*(i/ms)));
-    delay(25);
+    delay(fadeRefresh);
   }
   setBrightness(brightness);
 }
 
-//Fade the brightness of the LED between 'minVal' and 'maxVal' using 'color'
-void pulse(int minVal, int maxVal, const int color[]) {
+//Continue pulsing between (minVal, maxVal) with a cyclic 'period' (in seconds) and in 'color'
+void continuePulse(int minVal, int maxVal, double period, const int color[]) {
   setColor(color);
-  if (currentBrightness < minVal) pulseState = 1;
-  else if (currentBrightness > maxVal) pulseState = -1;
-  setBrightness(currentBrightness+pulseState*3);
+  continuePulse(minVal, maxVal, period);
+}
+
+//Continue pulsing between (minVal, maxVal) with a cyclic 'period' (in seconds)
+void continuePulse(int minVal, int maxVal, double period) {
+  if (millis() >= nextFadeTime) {
+    
+    if (millis()-nextFadeTime > 4*fadeRefresh) newFadeBrightness = currentBrightness;
+    setBrightness(newFadeBrightness);
+
+    double brightnessChange = (double(maxVal-minVal)*2.0)/(double(period*1000)/fadeRefresh);
+    nextFadeTime = millis() + fadeRefresh;
+    double newBrightness = newFadeBrightness+(double(pulseState)*brightnessChange);
+    
+    if (newBrightness < minVal) {
+      pulseState = 1;
+      newFadeBrightness = minVal;
+    } else if (newBrightness > maxVal) {
+      pulseState = -1;
+      newFadeBrightness = maxVal;
+    } else newFadeBrightness = newBrightness;
+  }
+}
+
+//Pulse the LED for a duration:
+    // minVal/maxVal: The bounds of the fade brightness
+    // period: The period (in seconds) of one full cycle of brightness
+    // color: The color to fade in
+    // duration: The amount of time to pulse for
+void pulseForDuration(int minVal, int maxVal, double period, const int color[], double duration) {
+  setColor(color);
+  pulseForDuration(minVal, maxVal, period, duration);
+}
+
+//Pulse the LED for a duration:
+    // minVal/maxVal: The bounds of the fade brightness
+    // period: The period (in seconds) of one full cycle of brightness
+    // duration: The amount of time to pulse for
+void pulseForDuration(int minVal, int maxVal, double period, double duration) {
+  unsigned long endTime = millis() + (duration*1000);
+  while(millis() < endTime) continuePulse(minVal, maxVal, period);
 }
 
 //Set the color/brightness of the LED to 'currentBrightness' and 'currentColor'
 void updateLED() {
-  analogWrite(redPin, 255-(currentBrightness*currentColor[0])/100);
-  analogWrite(greenPin, 255-(currentBrightness*currentColor[1])/100);
-  analogWrite(bluePin, 255-(currentBrightness*currentColor[2])/100);
+  analogWrite(redPin, int(255-int(currentBrightness*double(currentColor[0]))/100.0));
+  analogWrite(greenPin, int(255-int(currentBrightness*double(currentColor[1]))/100.0));
+  analogWrite(bluePin, int(255-int(currentBrightness*double(currentColor[2]))/100.0));
 }
 
